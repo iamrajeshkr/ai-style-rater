@@ -1,6 +1,48 @@
 import { openai } from "@/lib/openai";
 import { STYLE_RATER_PROMPT } from "@/lib/prompts";
 import { createClient } from "@/lib/supabase/server";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+async function rateWithOpenAI(image: string): Promise<string> {
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: STYLE_RATER_PROMPT },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Rate this outfit. Be specific about what you see.",
+          },
+          {
+            type: "image_url",
+            image_url: { url: image, detail: "high" },
+          },
+        ],
+      },
+    ],
+    max_tokens: 800,
+    temperature: 0.8,
+  });
+
+  return completion.choices[0]?.message?.content ?? "";
+}
+
+async function rateWithGemini(image: string): Promise<string> {
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+  const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+  const mimeType = image.startsWith("data:image/png") ? "image/png" : "image/jpeg";
+
+  const result = await model.generateContent([
+    { text: STYLE_RATER_PROMPT + "\n\nRate this outfit. Be specific about what you see." },
+    { inlineData: { data: base64Data, mimeType } },
+  ]);
+
+  return result.response.text();
+}
 
 export async function POST(request: Request) {
   const body = await request.json();
@@ -10,38 +52,28 @@ export async function POST(request: Request) {
     return Response.json({ error: "No image provided" }, { status: 400 });
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    return Response.json(
-      { error: "OpenAI API key not configured" },
-      { status: 500 }
-    );
-  }
-
   let raw: string;
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: STYLE_RATER_PROMPT },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "Rate this outfit. Be specific about what you see.",
-            },
-            {
-              type: "image_url",
-              image_url: { url: image, detail: "high" },
-            },
-          ],
-        },
-      ],
-      max_tokens: 800,
-      temperature: 0.8,
-    });
-
-    raw = completion.choices[0]?.message?.content ?? "";
+    // Try OpenAI first, fall back to Gemini
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        raw = await rateWithOpenAI(image);
+      } catch {
+        // OpenAI failed (quota, etc.) — try Gemini
+        if (process.env.GEMINI_API_KEY) {
+          raw = await rateWithGemini(image);
+        } else {
+          throw new Error("OpenAI quota exceeded and no Gemini fallback configured");
+        }
+      }
+    } else if (process.env.GEMINI_API_KEY) {
+      raw = await rateWithGemini(image);
+    } else {
+      return Response.json(
+        { error: "No AI API key configured" },
+        { status: 500 }
+      );
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return Response.json(
@@ -49,6 +81,9 @@ export async function POST(request: Request) {
       { status: 502 }
     );
   }
+
+  // Gemini sometimes wraps response in ```json ... ```, strip it
+  raw = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "");
 
   try {
     const parsed = JSON.parse(raw);
