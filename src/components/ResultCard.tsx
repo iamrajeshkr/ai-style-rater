@@ -17,20 +17,23 @@ export default function ResultCard({ result, imagePreview }: ResultCardProps) {
   const label = getScoreLabel(result.overall_score);
 
   async function handleCopy() {
-    const text = formatShareText(result);
+    const appUrl = typeof window !== "undefined" ? window.location.origin : "";
+    const text = formatShareText(result, appUrl);
     await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
   async function handleShare() {
-    const text = formatShareText(result);
+    const appUrl = typeof window !== "undefined" ? window.location.origin : "";
+    const text = formatShareText(result, appUrl);
 
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `StyleCheck AI - ${result.overall_score}/10`,
+          title: `I got ${result.overall_score}/10 on StyleCheck AI 👔`,
           text,
+          url: appUrl,
         });
         return;
       } catch {
@@ -177,24 +180,16 @@ export default function ResultCard({ result, imagePreview }: ResultCardProps) {
   );
 }
 
-function formatShareText(result: StyleRating): string {
-  const bars = Object.entries(result.ratings)
-    .map(([key, val]) => {
-      const info = ratingLabels[key];
-      return `${info?.emoji ?? ""} ${info?.label ?? key}: ${val.score}/10`;
-    })
-    .join("\n");
+function formatShareText(result: StyleRating, appUrl: string): string {
+  const scoreEmoji = result.overall_score >= 8 ? "🔥" : result.overall_score >= 6 ? "✨" : result.overall_score >= 4 ? "😅" : "💀";
 
-  return `✨ StyleCheck AI - ${result.overall_score}/10
+  return `${scoreEmoji} I just got my outfit rated by AI and scored ${result.overall_score}/10!
 
-"${result.vibe}"
+Vibe: "${result.vibe}"
 
-${bars}
-
-💀 ${result.roast}
-💖 ${result.compliment}
-
+💀 Roast: ${result.roast}
 ⭐ Celeb match: ${result.celebrity_match}
 
-— StyleCheck AI`;
+Think you can beat my score? Rate your fit 👇
+${appUrl}`;
 }
