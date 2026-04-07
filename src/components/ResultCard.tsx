@@ -29,6 +29,24 @@ export default function ResultCard({ result, imagePreview }: ResultCardProps) {
     const text = formatShareText(result, appUrl);
 
     if (navigator.share) {
+      // Try sharing with the outfit image attached
+      try {
+        const imageFile = await dataUrlToFile(imagePreview, "my-outfit.jpg");
+        const canShareFiles =
+          imageFile && navigator.canShare?.({ files: [imageFile] });
+
+        if (canShareFiles) {
+          await navigator.share({
+            text,
+            files: [imageFile],
+          });
+          return;
+        }
+      } catch {
+        // file sharing failed, try text-only
+      }
+
+      // Fallback: text-only share
       try {
         await navigator.share({
           title: `I got ${result.overall_score}/10 on StyleCheck AI 👔`,
@@ -37,7 +55,7 @@ export default function ResultCard({ result, imagePreview }: ResultCardProps) {
         });
         return;
       } catch {
-        // fallthrough
+        // user cancelled or share failed
       }
     }
 
@@ -178,6 +196,15 @@ export default function ResultCard({ result, imagePreview }: ResultCardProps) {
       </div>
     </div>
   );
+}
+
+async function dataUrlToFile(
+  dataUrl: string,
+  filename: string
+): Promise<File> {
+  const res = await fetch(dataUrl);
+  const blob = await res.blob();
+  return new File([blob], filename, { type: blob.type || "image/jpeg" });
 }
 
 function formatShareText(result: StyleRating, appUrl: string): string {
