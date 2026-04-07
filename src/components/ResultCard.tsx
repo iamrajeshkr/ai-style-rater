@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { type StyleRating, ratingLabels } from "@/lib/prompts";
+import { generateShareCard } from "@/lib/generate-card";
 import ScoreRing, { getScoreColor, getScoreLabel } from "./ScoreRing";
 import RatingBar from "./RatingBar";
 
@@ -12,7 +13,9 @@ interface ResultCardProps {
 
 export default function ResultCard({ result, imagePreview }: ResultCardProps) {
   const [copied, setCopied] = useState(false);
-  const [shared, setShared] = useState(false);
+  const [shareState, setShareState] = useState<
+    "idle" | "generating" | "done"
+  >("idle");
   const color = getScoreColor(result.overall_score);
   const label = getScoreLabel(result.overall_score);
 
@@ -28,40 +31,58 @@ export default function ResultCard({ result, imagePreview }: ResultCardProps) {
     const appUrl = typeof window !== "undefined" ? window.location.origin : "";
     const text = formatShareText(result, appUrl);
 
-    if (navigator.share) {
-      // Try sharing with the outfit image attached
-      try {
-        const imageFile = await dataUrlToFile(imagePreview, "my-outfit.jpg");
-        const canShareFiles =
-          imageFile && navigator.canShare?.({ files: [imageFile] });
+    setShareState("generating");
 
-        if (canShareFiles) {
+    if (navigator.share) {
+      // Generate a styled card image with scores baked in
+      try {
+        const cardBlob = await generateShareCard(imagePreview, result);
+        const cardFile = new File([cardBlob], "stylecheck-result.jpg", {
+          type: "image/jpeg",
+        });
+
+        if (navigator.canShare?.({ files: [cardFile] })) {
           await navigator.share({
             text,
-            files: [imageFile],
+            files: [cardFile],
           });
+          setShareState("idle");
           return;
         }
       } catch {
-        // file sharing failed, try text-only
+        // card generation or file share failed, try raw image
       }
 
-      // Fallback: text-only share
+      // Fallback: share raw outfit image
+      try {
+        const rawFile = await dataUrlToFile(imagePreview, "my-outfit.jpg");
+        if (navigator.canShare?.({ files: [rawFile] })) {
+          await navigator.share({ text, files: [rawFile] });
+          setShareState("idle");
+          return;
+        }
+      } catch {
+        // fallthrough
+      }
+
+      // Fallback: text-only
       try {
         await navigator.share({
           title: `I got ${result.overall_score}/10 on StyleCheck AI 👔`,
           text,
           url: appUrl,
         });
+        setShareState("idle");
         return;
       } catch {
-        // user cancelled or share failed
+        // user cancelled
       }
     }
 
+    // Final fallback: copy to clipboard
     await navigator.clipboard.writeText(text);
-    setShared(true);
-    setTimeout(() => setShared(false), 2000);
+    setShareState("done");
+    setTimeout(() => setShareState("idle"), 2000);
   }
 
   return (
@@ -170,7 +191,7 @@ export default function ResultCard({ result, imagePreview }: ResultCardProps) {
             STYLECHECK AI
           </span>
           <span className="text-[10px] text-gray-600">
-            stylecheckai.app
+            ai-style-rater.vercel.app
           </span>
         </div>
       </div>
@@ -185,13 +206,18 @@ export default function ResultCard({ result, imagePreview }: ResultCardProps) {
         </button>
         <button
           onClick={handleShare}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-bold text-white transition-all cursor-pointer"
+          disabled={shareState === "generating"}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-bold text-white transition-all cursor-pointer disabled:opacity-60"
           style={{
             background: `linear-gradient(135deg, ${color}, ${color}cc)`,
             boxShadow: `0 0 20px ${color}30`,
           }}
         >
-          {shared ? "✓ Copied to share!" : "📤 Share"}
+          {shareState === "generating"
+            ? "⏳ Creating card..."
+            : shareState === "done"
+              ? "✓ Copied to share!"
+              : "📤 Share"}
         </button>
       </div>
     </div>
@@ -208,7 +234,14 @@ async function dataUrlToFile(
 }
 
 function formatShareText(result: StyleRating, appUrl: string): string {
-  const scoreEmoji = result.overall_score >= 8 ? "🔥" : result.overall_score >= 6 ? "✨" : result.overall_score >= 4 ? "😅" : "💀";
+  const scoreEmoji =
+    result.overall_score >= 8
+      ? "🔥"
+      : result.overall_score >= 6
+        ? "✨"
+        : result.overall_score >= 4
+          ? "😅"
+          : "💀";
 
   return `${scoreEmoji} I just got my outfit rated by AI and scored ${result.overall_score}/10!
 
