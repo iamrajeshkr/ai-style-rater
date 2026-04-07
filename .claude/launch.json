@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "style-rater-dev",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["next", "dev", "-p", "3099"],
+      "port": 3099,
+      "cwd": "/Users/rajesh/Desktop/vibe-coding/anti-gravity/reddit-scrapper/ai-style-rater"
+    }
+  ]
+}

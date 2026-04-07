@@ -79,12 +79,9 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col items-center px-4 py-8">
       <div className="w-full max-w-md">
-        {/* Header */}
+        {/* Tagline */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-black tracking-tight">
-            StyleCheck<span className="text-purple-500">AI</span>
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-gray-500">
             rate your fit. get roasted. level up.
           </p>
         </div>
