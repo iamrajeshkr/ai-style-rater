@@ -47,10 +47,10 @@ export default function Home() {
         body: JSON.stringify({ image: dataUrl }),
       });
 
-      const data: StyleResponse = await res.json();
+      const data = await res.json();
 
-      if (isStyleError(data)) {
-        setErrorMsg(data.message);
+      if (data.error) {
+        setErrorMsg(data.message || data.error);
         setState("error");
         return;
       }
@@ -58,7 +58,7 @@ export default function Home() {
       setResult(data);
       setState("result");
     } catch {
-      setErrorMsg("Something broke 💀 Check your API key in .env.local");
+      setErrorMsg("Something broke 💀 Try again in a moment");
       setState("error");
     }
   }

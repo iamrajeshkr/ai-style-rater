@@ -17,29 +17,38 @@ export async function POST(request: Request) {
     );
   }
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: STYLE_RATER_PROMPT },
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: "Rate this outfit. Be specific about what you see.",
-          },
-          {
-            type: "image_url",
-            image_url: { url: image, detail: "high" },
-          },
-        ],
-      },
-    ],
-    max_tokens: 800,
-    temperature: 0.8,
-  });
+  let raw: string;
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: STYLE_RATER_PROMPT },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Rate this outfit. Be specific about what you see.",
+            },
+            {
+              type: "image_url",
+              image_url: { url: image, detail: "high" },
+            },
+          ],
+        },
+      ],
+      max_tokens: 800,
+      temperature: 0.8,
+    });
 
-  const raw = completion.choices[0]?.message?.content ?? "";
+    raw = completion.choices[0]?.message?.content ?? "";
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return Response.json(
+      { error: "ai_error", message: `AI service error: ${message}` },
+      { status: 502 }
+    );
+  }
 
   try {
     const parsed = JSON.parse(raw);
